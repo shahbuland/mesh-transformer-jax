@@ -84,7 +84,7 @@ class CausalTransformerShard(hk.Module):
         states = []
 
         for l in self.transformer_layers:
-            res, layer_state = l.get_init_decode_state(x, length = 1, attn_bias)
+            res, layer_state = l.get_init_decode_state(x, length, attn_bias)
             x = x + res
             states.append(layer_state)
         
