@@ -1,3 +1,6 @@
+# Purpose of this fork
+Adding functionality to MTJ so it can be used to encode text sequences in order to use it for training larger iterations of [CARP](https://arxiv.org/abs/2110.03111).
+
 # Table of contents
 1. [Mesh Transformer JAX](#mesh-transformer-jax)
     1. [Updates](#updates)
