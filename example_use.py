@@ -1,3 +1,6 @@
+from mesh_transformer.sampling import nucleaus_sample
+import optax
+
 # the goal of this fork is to be able to turn the mesh transformer model into an encoder
 # i.e. make it skip the final projection layer and just return its hidden states over the inputted tokens
 
@@ -13,7 +16,9 @@ params = {
 
     "seq": 128,
     "cores_per_replica": 8,
-    "per_replica_batch": 1
+    "per_replica_batch": 1,
+    "sampler":nucleaus_sample,
+    "optimizer":optax.scale(0)
 }
 
 from mesh_transformer.transformer_shard import CausalTransformer
