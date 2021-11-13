@@ -71,6 +71,29 @@ class CausalTransformerShard(hk.Module):
             "correct": correct
         }
 
+    # ==== CARP STUFF ====
+    def encode(self, context):
+        input_len = context.shape[0]
+        if self.rpe is not None:
+            attn_bias = self.rpe(input_len, input_len, self.heads_per_shard, 32)
+        else:
+            attn_bias = 0
+
+        x = self.embed(context)
+
+        states = []
+
+        for l in self.transformer_layers:
+            res, layer_state = l.get_init_decode_state(x, length = 1, attn_bias)
+            x = x + res
+            states.append(layer_state)
+        
+        print(x.shape)
+
+        return x, (states, hk.next_rng_key())
+
+    # ====================
+
     def generate_initial(self, context, length):
         # slice last token off the context (we use that in generate_once to generate the first new token)
         last = context[-1:]
@@ -187,6 +210,14 @@ class CausalTransformer:
                 "opt_state": optimizer.init(params)
             }
 
+        # ==== CARP STUFF ====
+        def encode(state, key, ctx, ctx_length, aux):
+            transformer = CausalTransformerShard(config)
+            _, initial_state = transformer.encode(context, ctx_length)
+
+
+        # ====================
+
         def generate(state, key, ctx, ctx_length, aux, sampler_options):
             sampler = config["sampler"]
             gen_length = self.gen_length
@@ -246,7 +277,16 @@ class CausalTransformer:
                                                                  ["batch", ...]),
                                                         out_axes=["batch", ...],
                                                         axis_resources={'shard': 'mp', 'batch': 'dp'})
-
+        
+        # ==== CARP ====
+        self.encode_xmap = jax.experimental.maps.xmap(fun=encode,
+                                                      in_axes=(["shard", ...], # states
+                                                               ["batch", ...], # key
+                                                               ["batch", ...], # ctx
+                                                               ["batch", ...]), # ctx_len
+                                                      out_axes = ["batch", ...],
+                                                      axis_resources={'shard':'mp', 'batch':'dp'})
+        # ==============
         self.move_xmap = jax.experimental.maps.xmap(fun=lambda x, _: to_bf16(x),
                                                     in_axes=(["shard", ...], ["batch", ...]),
                                                     out_axes=["shard", ...],
@@ -323,6 +363,19 @@ class CausalTransformer:
         # print(f"eval done in {time.time() - start:.06}s")
         return out
 
+    # ==== CARP ====
+
+    def encode(self, ctx, ctx_length):
+        key = hk.PRNGSequence(random.randint(0, 2 ** 60))
+
+        batch_size = ctx.shape[0]
+        
+        return self.encode_xmap(self.state,
+                                jnp.array(key.take(batch_size)),
+                                ctx,
+                                np.array(ctx_length, dtype=np.uint32))
+
+    # ==============
     def generate(self, ctx, ctx_length, gen_length, sampler_options, return_logits=False):
         key = hk.PRNGSequence(random.randint(0, 2 ** 60))
 
