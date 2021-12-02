@@ -8,7 +8,7 @@ import optax
 params = {
     "layers": 4,
     "d_model": 256,
-    "n_heads": 4,
+    "n_heads": 16,
     "n_vocab": 512,
     "norm": "layernorm",
     "pe": "rotary",
@@ -22,16 +22,23 @@ params = {
 }
 
 from mesh_transformer.transformer_shard import CausalTransformer
-network = CausalTransformer(params)
-
 import numpy as np
 
-tokens = np.random.randint(0, high=params["n_vocab"], size = (1, params["seq"]))
+# set up devices and resource env
+cores_per_replica = 8
+tpu_size = jax.device_count()
+mesh_shape = (tpu_size // cores_per_replica, cores_per_replica)
+devices = np.array(jax.devices()).reshape(mesh_shape)
 
-top_p = 0.9
-temp = 1.0
-output = network.generate(batched_tokens, 1, gen_len,
-        {"top_p": np.ones(total_batch) * top_p, "temp": np.ones(total_batch) * temp})
+with jax.experimental.maps.mesh(devices, ('dp', 'mp')):
+    network = CausalTransformer(params)
+
+    tokens = np.random.randint(0, high=params["n_vocab"], size = (1, params["seq"]))
+
+    top_p = 0.9
+    temp = 1.0
+    output = network.generate(batched_tokens, 1, gen_len,
+            {"top_p": np.ones(total_batch) * top_p, "temp": np.ones(total_batch) * temp})
 
 # TODO: Add an encode method to the network that returns all hidden states corresponding to 
 # seqeunce (i.e. give output without giving projected)
