@@ -1,5 +1,6 @@
 from mesh_transformer.sampling import nucleaus_sample
 import optax
+import jax
 
 # the goal of this fork is to be able to turn the mesh transformer model into an encoder
 # i.e. make it skip the final projection layer and just return its hidden states over the inputted tokens
@@ -32,13 +33,7 @@ devices = np.array(jax.devices()).reshape(mesh_shape)
 
 with jax.experimental.maps.mesh(devices, ('dp', 'mp')):
     network = CausalTransformer(params)
+    bs = 16
+    tokens = np.random.randint(0, high=params["n_vocab"], size = (bs, params["seq"]))
+    enc = network.encode(tokens, 128 * np.ones(bs))
 
-    tokens = np.random.randint(0, high=params["n_vocab"], size = (1, params["seq"]))
-
-    top_p = 0.9
-    temp = 1.0
-    output = network.generate(batched_tokens, 1, gen_len,
-            {"top_p": np.ones(total_batch) * top_p, "temp": np.ones(total_batch) * temp})
-
-# TODO: Add an encode method to the network that returns all hidden states corresponding to 
-# seqeunce (i.e. give output without giving projected)
